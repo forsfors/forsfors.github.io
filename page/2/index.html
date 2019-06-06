@@ -320,7 +320,7 @@
   
   
   <div class="post-block">
-    <link itemprop="mainEntityOfPage" href="http://www.mrfors.top/2018/12/12/RocketMQ源码阅读环境/">
+    <link itemprop="mainEntityOfPage" href="http://www.mrfors.top/2018/12/13/ReentrantLock和synchronized的区别、使用、测试/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
       <meta itemprop="name" content="MrFroS">
@@ -340,7 +340,7 @@
           <h1 class="post-title" itemprop="name headline">
                 
                 
-                <a href="/2018/12/12/RocketMQ源码阅读环境/" class="post-title-link" itemprop="url">RocketMQ源码阅读环境</a>
+                <a href="/2018/12/13/ReentrantLock和synchronized的区别、使用、测试/" class="post-title-link" itemprop="url">ReentrantLock和synchronized的区别、使用、测试</a>
               
             
           </h1>
@@ -365,7 +365,7 @@
                 
               
 
-              <time title="创建时间：2018-12-12 00:00:00" itemprop="dateCreated datePublished" datetime="2018-12-12T00:00:00+08:00">2018-12-12</time>
+              <time title="创建时间：2018-12-13 00:00:00" itemprop="dateCreated datePublished" datetime="2018-12-13T00:00:00+08:00">2018-12-13</time>
             
 
             
@@ -383,7 +383,7 @@
                 <span class="post-meta-item-text">分类于</span>
               
               
-                <span itemprop="about" itemscope itemtype="http://schema.org/Thing"><a href="/categories/RocketMQ/" itemprop="url" rel="index"><span itemprop="name">RocketMQ</span></a></span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing"><a href="/categories/java并发/" itemprop="url" rel="index"><span itemprop="name">java并发</span></a></span>
 
                 
                 
@@ -421,20 +421,16 @@
         
           
             <p>
-              RocketMQ文档很少，源码注释也少。master宕机不支持自动切换（至少开源版本不支持）。看了一段时间，目前暂不打算再看RocketMQ源码，把阅读环境配置记录下，以后有需要再看。基于源码4.3.2
+              ReentrantLock是java并发包提供的一种可重入互斥锁，具有和synchronized相同的基本行为和语义，但提供了一些额外功能。
+ReentrantLock增强的能力：
 
-首先按官方文档编译源码。
-
-distribution/conf/log配置都改成
-
-
-&lt;
+ReentrantLock创建时可以指定是公平锁还是非公平锁，所谓的公平锁就是先等待的线程先获得锁。而synchro
               ...
             </p>
           <!--noindex-->
           
             <div class="post-button text-center">
-              <a class="btn" href="/2018/12/12/RocketMQ源码阅读环境/#more" rel="contents">
+              <a class="btn" href="/2018/12/13/ReentrantLock和synchronized的区别、使用、测试/#more" rel="contents">
                 阅读全文 &raquo;
               </a>
             </div>

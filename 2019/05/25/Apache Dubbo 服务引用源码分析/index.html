@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+
+<html class="theme-next muse use-motion" lang="zh-CN">
+<head><meta name="generator" content="Hexo 3.8.0">
+  <meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2">
+
+<link rel="stylesheet" href="/css/main.css?v=7.1.1">
+
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png?v=7.1.1">
+
+
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png?v=7.1.1">
+
+
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png?v=7.1.1">
+
+
+  <link rel="mask-icon" href="/images/logo.svg?v=7.1.1" color="#222">
+
+
+
+
+
+
+
+<script id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Muse',
+    version: '7.1.1',
+    sidebar: {"position":"left","display":"post","offset":12,"onmobile":false,"dimmer":false},
+    back2top: true,
+    back2top_sidebar: false,
+    fancybox: false,
+    fastclick: false,
+    lazyload: false,
+    tabs: true,
+    motion: {"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+  
+
+
+
+
+  <meta name="description" content="Dubbo服务引用部分涉及consumer的注册，provider服务的发现，负载均衡，熔断，远程服务调用等功能。本文以2.7.1中的dubbo-demo/dubbo-demo-api为例，注册中心改成了zookeeper://localhost:2181。本文要求至少理解dubbo的SPI机制。服务引用大概流程：  注册consumer到zk 增加zk的监听，并对zk的数据（除consumer外">
+<meta name="keywords" content="dubbo">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Apache Dubbo 服务引用源码分析">
+<meta property="og:url" content="http://www.mrfors.top/2019/05/25/Apache Dubbo 服务引用源码分析/index.html">
+<meta property="og:site_name" content="MrForS">
+<meta property="og:description" content="Dubbo服务引用部分涉及consumer的注册，provider服务的发现，负载均衡，熔断，远程服务调用等功能。本文以2.7.1中的dubbo-demo/dubbo-demo-api为例，注册中心改成了zookeeper://localhost:2181。本文要求至少理解dubbo的SPI机制。服务引用大概流程：  注册consumer到zk 增加zk的监听，并对zk的数据（除consumer外">
+<meta property="og:locale" content="zh-CN">
+<meta property="og:updated_time" content="2019-06-06T10:10:35.954Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Apache Dubbo 服务引用源码分析">
+<meta name="twitter:description" content="Dubbo服务引用部分涉及consumer的注册，provider服务的发现，负载均衡，熔断，远程服务调用等功能。本文以2.7.1中的dubbo-demo/dubbo-demo-api为例，注册中心改成了zookeeper://localhost:2181。本文要求至少理解dubbo的SPI机制。服务引用大概流程：  注册consumer到zk 增加zk的监听，并对zk的数据（除consumer外">
+
+
+
+
+
+  
+  
+  <link rel="canonical" href="http://www.mrfors.top/2019/05/25/Apache Dubbo 服务引用源码分析/">
+
+
+
+<script id="page.configurations">
+  CONFIG.page = {
+    sidebar: "",
+  };
+</script>
+
+  <title>Apache Dubbo 服务引用源码分析 | MrForS</title>
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .motion-element,
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-title { opacity: initial; }
+
+  .use-motion .logo,
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-CN">
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/" class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">MrForS</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+    
+    
+  </div>
+
+  <div class="site-nav-toggle">
+    <button aria-label="切换导航栏">
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  
+    <ul id="menu" class="menu">
+      
+        
+        
+        
+          
+          <li class="menu-item menu-item-home">
+
+    
+    
+    
+      
+    
+
+    
+
+    <a href="/" rel="section"><i class="menu-item-icon fa fa-fw fa-home"></i> <br>首页</a>
+
+  </li>
+        
+        
+        
+          
+          <li class="menu-item menu-item-categories">
+
+    
+    
+    
+      
+    
+
+    
+
+    <a href="/categories/" rel="section"><i class="menu-item-icon fa fa-fw fa-th"></i> <br>分类</a>
+
+  </li>
+        
+        
+        
+          
+          <li class="menu-item menu-item-archives">
+
+    
+    
+    
+      
+    
+
+    
+
+    <a href="/archives/" rel="section"><i class="menu-item-icon fa fa-fw fa-archive"></i> <br>归档</a>
+
+  </li>
+        
+        
+        
+          
+          <li class="menu-item menu-item-about">
+
+    
+    
+    
+      
+    
+
+    
+
+    <a href="/about/" rel="section"><i class="menu-item-icon fa fa-fw fa-user"></i> <br>关于</a>
+
+  </li>
+
+      
+      
+    </ul>
+  
+
+  
+    
+
+  
+
+  
+</nav>
+
+
+
+  
+
+
+
+</div>
+    </header>
+
+    
+
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  
+
+  <article class="post post-type-normal" itemscope itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://www.mrfors.top/2019/05/25/Apache Dubbo 服务引用源码分析/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="MrFroS">
+      <meta itemprop="description" content>
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="MrForS">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">Apache Dubbo 服务引用源码分析
+
+              
+            
+          </h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+
+            
+            
+            
+
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+
+              
+                
+              
+
+              <time title="创建时间：2019-05-25 00:00:00" itemprop="dateCreated datePublished" datetime="2019-05-25T00:00:00+08:00">2019-05-25</time>
+            
+
+            
+          </span>
+
+          
+            <span class="post-category">
+            
+              <span class="post-meta-divider">|</span>
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-folder-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">分类于</span>
+              
+              
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing"><a href="/categories/dubbo/" itemprop="url" rel="index"><span itemprop="name">dubbo</span></a></span>
+
+                
+                
+              
+            </span>
+          
+
+          
+            
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <p>Dubbo服务引用部分涉及consumer的注册，provider服务的发现，负载均衡，熔断，远程服务调用等功能。<br>本文以2.7.1中的dubbo-demo/dubbo-demo-api为例，注册中心改成了zookeeper://localhost:2181。本文要求至少理解dubbo的SPI机制。<br>服务引用大概流程：</p>
+<ol>
+<li>注册consumer到zk</li>
+<li>增加zk的监听，并对zk的数据（除consumer外）进行一次同步</li>
+<li>生成Invoker，经包装后生成Invoker的代理</li>
+<li>用户通过invoker发起接口调用，invoker通过负载均载，过滤，后发起tcp请求，得到结果后返回。</li>
+</ol>
+<p>本文以代码块分类，并没有按上述流程分类。</p>
+<p>服务引用部分主代码，注：下面这段代码缩进代表下级调用<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">DemoService service = reference.get();</span><br><span class="line">    init();</span><br><span class="line">        ref = createProxy(map);<span class="comment">//最终返回的就是这个ref</span></span><br><span class="line">            invoker = refprotocol.refer(interfaceClass, urls.get(<span class="number">0</span>));<span class="comment">//创建invoker</span></span><br><span class="line">            <span class="keyword">return</span> (T) proxyFactory.getProxy(invoker);<span class="comment">//创建invoker的代理</span></span><br></pre></td></tr></table></figure></p>
+<h3 id="1-解析invoker-refprotocol-refer-interfaceClass-urls-get-0"><a href="#1-解析invoker-refprotocol-refer-interfaceClass-urls-get-0" class="headerlink" title="1. 解析invoker = refprotocol.refer(interfaceClass, urls.get(0));"></a>1. 解析invoker = refprotocol.refer(interfaceClass, urls.get(0));</h3><p>这里的urls.get(0)为   </p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">registry://localhost:2181/org.apache.dubbo.registry.RegistryService?application=dubbo-demo-api-provider&amp;dubbo=2.0.2&amp;pid=58826&amp;refer=application=dubbo-demo-api-provider&amp;default.lazy=false&amp;default.sticky=false&amp;dubbo=2.0.2&amp;interface=com.fors.DemoService&amp;lazy=false&amp;methods=sayHello&amp;pid=58826&amp;register.ip=192.168.1.101&amp;release=2.7.1&amp;side=consumer&amp;sticky=false&amp;timestamp=1559657839661&amp;registry=zookeeper&amp;release=2.7.1&amp;timestamp=1559657904945</span><br></pre></td></tr></table></figure>
+<p>所以进入RegistryProtocol#refer<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">Registry registry = registryFactory.getRegistry(url);//url中protocol为zookeeper，会进入其父类AbstractRegistryFactory#getRegistry，返回的类型为ZookeeperRegistry</span><br><span class="line">Map&lt;String, String&gt; qs = StringUtils.parseQueryString(url.getParameterAndDecoded(REFER_KEY));</span><br><span class="line">String group = qs.get(Constants.GROUP_KEY);//对应 服务分组 &lt;dubbo:service group和&lt;dubbo:reference group属性</span><br><span class="line">if (group != null &amp;&amp; group.length() &gt; 0) &#123;</span><br><span class="line">    if ((COMMA_SPLIT_PATTERN.split(group)).length &gt; 1 || &quot;*&quot;.equals(group)) &#123;</span><br><span class="line">        return doRefer(getMergeableCluster(), registry, type, url);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line">return doRefer(cluster, registry, type, url);//由于没有分组。会走这里</span><br></pre></td></tr></table></figure></p>
+<p>服务分组见<a href="http://dubbo.apache.org/zh-cn/docs/user/demos/service-group.html" target="_blank" rel="noopener">官网</a>。接着分析上面的doRefer方法<br><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">private</span> &lt;T&gt; <span class="function">Invoker&lt;T&gt; <span class="title">doRefer</span><span class="params">(Cluster cluster, Registry registry, Class&lt;T&gt; type, URL url)</span> </span>&#123;</span><br><span class="line">    RegistryDirectory&lt;T&gt; directory = <span class="keyword">new</span> RegistryDirectory&lt;T&gt;(type, url);<span class="comment">//服务字典</span></span><br><span class="line">    directory.setRegistry(registry);</span><br><span class="line">    directory.setProtocol(protocol);<span class="comment">//类型为RegistryProtocol</span></span><br><span class="line">    <span class="comment">// all attributes of REFER_KEY</span></span><br><span class="line">    Map&lt;String, String&gt; parameters = <span class="keyword">new</span> HashMap&lt;String, String&gt;(directory.getUrl().getParameters());</span><br><span class="line">    URL subscribeUrl = <span class="keyword">new</span> URL(CONSUMER_PROTOCOL, parameters.remove(REGISTER_IP_KEY), <span class="number">0</span>, type.getName(), parameters);</span><br><span class="line">    <span class="keyword">if</span> (!ANY_VALUE.equals(url.getServiceInterface()) &amp;&amp; url.getParameter(REGISTER_KEY, <span class="keyword">true</span>)) &#123;</span><br><span class="line">        directory.setRegisteredConsumerUrl(getRegisteredConsumerUrl(subscribeUrl, url));</span><br><span class="line">        registry.register(directory.getRegisteredConsumerUrl());<span class="comment">//下面1.2详解</span></span><br><span class="line">    &#125;</span><br><span class="line">    directory.buildRouterChain(subscribeUrl);<span class="comment">//2.7新增RouterChain</span></span><br><span class="line">    directory.subscribe(subscribeUrl.addParameter(CATEGORY_KEY,  <span class="comment">//订阅zk,监听provider变化</span></span><br><span class="line">            PROVIDERS_CATEGORY + <span class="string">","</span> + CONFIGURATORS_CATEGORY + <span class="string">","</span> + ROUTERS_CATEGORY));</span><br><span class="line"></span><br><span class="line">    Invoker invoker = cluster.join(directory);<span class="comment">//cluster为FailoverCluster，包装类为MockClusterWrapper</span></span><br><span class="line">    ProviderConsumerRegTable.registerConsumer(invoker, url, subscribeUrl, directory);</span><br><span class="line">    <span class="keyword">return</span> invoker;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure></p>
+<h4 id="1-1-RegistryDirectory，包含完整的地址列表，直接对接注册中心，并动态接收注册中心地址变更。非常重要。"><a href="#1-1-RegistryDirectory，包含完整的地址列表，直接对接注册中心，并动态接收注册中心地址变更。非常重要。" class="headerlink" title="1.1 RegistryDirectory，包含完整的地址列表，直接对接注册中心，并动态接收注册中心地址变更。非常重要。"></a>1.1 RegistryDirectory，包含完整的地址列表，直接对接注册中心，并动态接收注册中心地址变更。非常重要。</h4><h4 id="1-2-分析registry-register-directory-getRegisteredConsumerUrl"><a href="#1-2-分析registry-register-directory-getRegisteredConsumerUrl" class="headerlink" title="1.2 分析registry.register(directory.getRegisteredConsumerUrl());"></a>1.2 分析registry.register(directory.getRegisteredConsumerUrl());</h4><p>这里得到的url为     </p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">consumer://192.168.1.101/com.fors.DemoService?application=dubbo-demo-api-provider&amp;category=consumers&amp;check=false&amp;default.lazy=false&amp;default.sticky=false&amp;dubbo=2.0.2&amp;interface=com.fors.DemoService&amp;lazy=false&amp;methods=sayHello&amp;pid=58826&amp;release=2.7.1&amp;side=consumer&amp;sticky=false&amp;timestamp=1559657839661</span><br></pre></td></tr></table></figure>
+<p>会进入</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">FailbackRegistry#register(URL url)  </span><br><span class="line">==&gt;doRegister(url);     </span><br><span class="line">  ==&gt;zkClient.create(toUrlPath(url), url.getParameter(Constants.DYNAMIC_KEY, true));//把consumer写入zk</span><br></pre></td></tr></table></figure>
+<p>这里的toUrlPath(url)为</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">/dubbo/com.fors.DemoService/consumers/consumer://192.168.1.101/com.fors.DemoService?application=dubbo-demo-api-provider&amp;category=consumers&amp;check=false&amp;default.lazy=false&amp;default.sticky=false&amp;dubbo=2.0.2&amp;interface=com.fors.DemoService&amp;lazy=false&amp;methods=sayHello&amp;pid=58826&amp;release=2.7.1&amp;side=consumer&amp;sticky=false&amp;timestamp=1559657839661</span><br></pre></td></tr></table></figure>
+<p>前面的/dubbo/com.fors.DemoService/consumers/为zookeeper中的路径，后面的为存入zk的消费者结点。zkClient.create会将消费者信息注册到zk上。</p>
+<h4 id="1-3-directory-subscribe"><a href="#1-3-directory-subscribe" class="headerlink" title="1.3 directory.subscribe"></a>1.3 directory.subscribe</h4><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">public void subscribe(URL url) &#123;</span><br><span class="line">    setConsumerUrl(url);</span><br><span class="line">    consumerConfigurationListener.addNotifyListener(this);</span><br><span class="line">    serviceConfigurationListener = new ReferenceConfigurationListener(this, url);</span><br><span class="line">    registry.subscribe(url, this);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这里的registry.subscribe(url, this);会调用</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">FailbackRegistry#subscribe =&gt;</span><br><span class="line">    removeFailedSubscribed(url, listener);//取消失败订阅任务</span><br><span class="line">    doSubscribe(url, listener);</span><br><span class="line">    addFailedSubscribed(url, listener);//增加失败订阅任务，定时重试</span><br></pre></td></tr></table></figure>
+<p>这里doSubscribe(url, listener)中的listener就是1.1中的RegistryDirectory。会<br>进入ZookeeperRegistry#doSubscribe(final URL url, final NotifyListener listener)<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line">。。。</span><br><span class="line">List&lt;URL&gt; urls = new ArrayList&lt;&gt;();</span><br><span class="line">for (String path : toCategoriesPath(url)) &#123;</span><br><span class="line">    ConcurrentMap&lt;NotifyListener, ChildListener&gt; listeners = zkListeners.get(url);</span><br><span class="line">    if (listeners == null) &#123;</span><br><span class="line">        zkListeners.putIfAbsent(url, new ConcurrentHashMap&lt;&gt;());</span><br><span class="line">        listeners = zkListeners.get(url);</span><br><span class="line">    &#125;</span><br><span class="line">    ChildListener zkListener = listeners.get(listener);</span><br><span class="line">    if (zkListener == null) &#123;</span><br><span class="line">        listeners.putIfAbsent(listener, (parentPath, currentChilds) -&gt; ZookeeperRegistry.this.notify(url, listener, toUrlsWithEmpty(url, parentPath, currentChilds)));</span><br><span class="line">        zkListener = listeners.get(listener);</span><br><span class="line">    &#125;</span><br><span class="line">    zkClient.create(path, false);</span><br><span class="line">    List&lt;String&gt; children = zkClient.addChildListener(path, zkListener);//添加监听并获得path结点下的数据</span><br><span class="line">    if (children != null) &#123;</span><br><span class="line">        urls.addAll(toUrlsWithEmpty(url, path, children));</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br><span class="line">notify(url, listener, urls);</span><br></pre></td></tr></table></figure></p>
+<p>这里会给服务下的 providers，configurators，routers 结点添加监听器，同时获得数据。监听器为ChildListener类型，这里用lambda表达式实现。<br>之后调用notify(url, listener, urls); 进行一次刷新，这个方法最终调用AbstractRegistry#notify(URL url, NotifyListener listener, List<url> urls)中的</url></p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">listener.notify(categoryList); ==&gt;   </span><br><span class="line">RegistryDirectory#notify            </span><br><span class="line">    refreshOverrideAndInvoker(providerURLs);</span><br></pre></td></tr></table></figure>
+<figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">private</span> <span class="keyword">void</span> <span class="title">refreshInvoker</span><span class="params">(List&lt;URL&gt; invokerUrls)</span> </span>&#123;</span><br><span class="line">        ...</span><br><span class="line">        <span class="keyword">if</span> (invokerUrls.isEmpty()) &#123;</span><br><span class="line">            <span class="keyword">return</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        Map&lt;String, Invoker&lt;T&gt;&gt; newUrlInvokerMap = toInvokers(invokerUrls);<span class="comment">// Translate url list to Invoker map</span></span><br><span class="line">        <span class="keyword">if</span> (CollectionUtils.isEmptyMap(newUrlInvokerMap)) &#123;</span><br><span class="line">            logger.error(<span class="keyword">new</span> IllegalStateException(<span class="string">"urls to invokers error .invokerUrls.size :"</span> + invokerUrls.size() + <span class="string">", invoker.size :0. urls :"</span> + invokerUrls</span><br><span class="line">                    .toString()));</span><br><span class="line">            <span class="keyword">return</span>;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        List&lt;Invoker&lt;T&gt;&gt; newInvokers = Collections.unmodifiableList(<span class="keyword">new</span> ArrayList&lt;&gt;(newUrlInvokerMap.values()));</span><br><span class="line">        <span class="comment">// pre-route and build cache, notice that route cache should build on original Invoker list.</span></span><br><span class="line">        <span class="comment">// toMergeMethodInvokerMap() will wrap some invokers having different groups, those wrapped invokers not should be routed.</span></span><br><span class="line">        routerChain.setInvokers(newInvokers);</span><br><span class="line">        <span class="keyword">this</span>.invokers = multiGroup ? toMergeInvokerList(newInvokers) : newInvokers;</span><br><span class="line">        <span class="keyword">this</span>.urlInvokerMap = newUrlInvokerMap;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">try</span> &#123;</span><br><span class="line">            destroyUnusedInvokers(oldUrlInvokerMap, newUrlInvokerMap); <span class="comment">// Close the unused Invoker</span></span><br><span class="line">        &#125; <span class="keyword">catch</span> (Exception e) &#123;</span><br><span class="line">            logger.warn(<span class="string">"destroyUnusedInvokers error. "</span>, e);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这里只分析providers,如果刚才添加监听时获取到providers结点下有数据时，invokerUrls.isEmpty()就为false，执行  </p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Map&lt;String, Invoker&lt;T&gt;&gt; newUrlInvokerMap = toInvokers(invokerUrls);//把url 转化为Invoker的代理</span><br></pre></td></tr></table></figure>
+<p>接着进入</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">RegistryDirectory#toInvokers =&gt; </span><br><span class="line">invoker = new InvokerDelegate&lt;&gt;(protocol.refer(serviceType, url), url, providerUrl);</span><br></pre></td></tr></table></figure>
+<p>这里的url就是zk中providers下的数据，例：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">dubbo://192.168.1.101:20880/com.fors.DemoService?anyhost=true&amp;application=dubbo-demo-api-provider&amp;default.deprecated=false&amp;default.dynamic=false&amp;default.register=true&amp;deprecated=false&amp;dubbo=2.0.2&amp;dynamic=false&amp;generic=false&amp;interface=com.fors.DemoService&amp;methods=sayHello&amp;pid=1440&amp;register=true&amp;release=2.7.1&amp;side=provider&amp;timestamp=1559697632200</span><br></pre></td></tr></table></figure>
+<p>protocol.refer(serviceType, url)会调用DubboProtocol#refer</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">public &lt;T&gt; Invoker&lt;T&gt; refer(Class&lt;T&gt; serviceType, URL url) throws RpcException &#123;</span><br><span class="line">    optimizeSerialization(url);</span><br><span class="line"></span><br><span class="line">    // create rpc invoker.</span><br><span class="line">    DubboInvoker&lt;T&gt; invoker = new DubboInvoker&lt;T&gt;(serviceType, url, getClients(url), invokers);</span><br><span class="line">    invokers.add(invoker);</span><br><span class="line">    return invoker;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>getClients(url)方法最终创建client是在DubboProtocol#initClient,根据是否配置懒加载来决定client类型。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">if (url.getParameter(Constants.LAZY_CONNECT_KEY, false)) &#123;</span><br><span class="line">    client = new LazyConnectExchangeClient(url, requestHandler);</span><br><span class="line"></span><br><span class="line">&#125; else &#123;</span><br><span class="line">    client = Exchangers.connect(url, requestHandler);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>connect方法默认为HeaderExchanger#connect</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">public ExchangeClient connect(URL url, ExchangeHandler handler) throws RemotingException &#123;</span><br><span class="line">    return new HeaderExchangeClient(Transporters.connect(url, new DecodeHandler(new HeaderExchangeHandler(handler))), true);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>Transporter默认为NettyTransporter。<br>这里会打开tcp连接，并开启自动重连任务，心跳任务。<br>经过上面一系列步骤，最终<br>会把所有InvokerDelegate存入RegistryDirectory#urlInvokerMap</p>
+<h4 id="1-4-Invoker-invoker-cluster-join-directory"><a href="#1-4-Invoker-invoker-cluster-join-directory" class="headerlink" title="1.4 Invoker invoker = cluster.join(directory);"></a>1.4 Invoker invoker = cluster.join(directory);</h4><p>cluster为FailoverCluster，包装类为MockClusterWrapper。<br>返回FailoverClusterInvoker，包装类为MockClusterInvoker，包装类的directory为1.3中的RegistryDirectory，可以通过urlInvokerMap属性拿到所有invoker。</p>
+<h3 id="2-解析return-T-proxyFactory-getProxy-invoker"><a href="#2-解析return-T-proxyFactory-getProxy-invoker" class="headerlink" title="2. 解析return (T) proxyFactory.getProxy(invoker);"></a>2. 解析return (T) proxyFactory.getProxy(invoker);</h3><p>这里的proxyFactory为JavassistProxyFactory，包装类为StubProxyFactoryWrapper</p>
+<h4 id="2-1-先进入StubProxyFactoryWrapper-getProxy-Invoker"><a href="#2-1-先进入StubProxyFactoryWrapper-getProxy-Invoker" class="headerlink" title="2.1 先进入StubProxyFactoryWrapper#getProxy(Invoker)"></a>2.1 先进入StubProxyFactoryWrapper#getProxy(Invoker<t>)</t></h4><p>这里有本地存根的实现</p>
+<h4 id="2-2-再进入AbstractProxyFactory-getProxy-Invoker"><a href="#2-2-再进入AbstractProxyFactory-getProxy-Invoker" class="headerlink" title="2.2 再进入AbstractProxyFactory#getProxy(Invoker)"></a>2.2 再进入AbstractProxyFactory#getProxy(Invoker<t>)</t></h4><figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">@Override</span><br><span class="line">public &lt;T&gt; T getProxy(Invoker&lt;T&gt; invoker) throws RpcException &#123;</span><br><span class="line">    return getProxy(invoker, false);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">@Override</span><br><span class="line">public &lt;T&gt; T getProxy(Invoker&lt;T&gt; invoker, boolean generic) throws RpcException &#123;</span><br><span class="line">    ...</span><br><span class="line">    if (interfaces == null) &#123;</span><br><span class="line">        interfaces = new Class&lt;?&gt;[]&#123;invoker.getInterface(), EchoService.class&#125;;//增加回声测试服务EchoService接口</span><br><span class="line">    &#125;</span><br><span class="line">    ...</span><br><span class="line">    return getProxy(invoker, interfaces);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>再进入JavassistProxyFactory#getProxy</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">public &lt;T&gt; T getProxy(Invoker&lt;T&gt; invoker, Class&lt;?&gt;[] interfaces) &#123;</span><br><span class="line">    return (T) Proxy.getProxy(interfaces).newInstance(new InvokerInvocationHandler(invoker));</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这里类似于jdk的动态代理，服务接口的执行逻辑在InvokerInvocationHandler中，这里的invoker就是1.4中的MockClusterInvoker。最终由Javassist生成代理对象赋值给ref。</p>
+<h3 id="3-调用过程"><a href="#3-调用过程" class="headerlink" title="3.调用过程"></a>3.调用过程</h3><p>service.sayHello(“dubbo”);<br>先进入InvokerInvocationHandler#invoke</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">@Override</span><br><span class="line">public Object invoke(Object proxy, Method method, Object[] args) throws Throwable &#123;</span><br><span class="line">    String methodName = method.getName();</span><br><span class="line">    ...</span><br><span class="line">    return invoker.invoke(createInvocation(method, args)).recreate();//createInvocation构建一个RpcInvocation对象</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>进入MockClusterInvoker#invoke</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line">public Result invoke(Invocation invocation) throws RpcException &#123;</span><br><span class="line">    Result result = null;</span><br><span class="line"></span><br><span class="line">    String value = directory.getUrl().getMethodParameter(invocation.getMethodName(), Constants.MOCK_KEY, Boolean.FALSE.toString()).trim();</span><br><span class="line">    if (value.length() == 0 || value.equalsIgnoreCase(&quot;false&quot;)) &#123;</span><br><span class="line">        //no mock</span><br><span class="line">        result = this.invoker.invoke(invocation);//正常调用进入这里</span><br><span class="line">    &#125; else if (value.startsWith(&quot;force&quot;)) &#123;</span><br><span class="line">        if (logger.isWarnEnabled()) &#123;</span><br><span class="line">            logger.warn(&quot;force-mock: &quot; + invocation.getMethodName() + &quot; force-mock enabled , url : &quot; + directory.getUrl());</span><br><span class="line">        &#125;</span><br><span class="line">        //force:direct mock</span><br><span class="line">        result = doMockInvoke(invocation, null);//熔断功能，直接失败</span><br><span class="line">    &#125; else &#123;</span><br><span class="line">        //fail-mock  正常调用失败后，执行直接失败方法</span><br><span class="line">        try &#123;</span><br><span class="line">            result = this.invoker.invoke(invocation);</span><br><span class="line">        &#125; catch (RpcException e) &#123;</span><br><span class="line">            if (e.isBiz()) &#123;</span><br><span class="line">                throw e;</span><br><span class="line">            &#125;</span><br><span class="line">            </span><br><span class="line">            if (logger.isWarnEnabled()) &#123;</span><br><span class="line">                logger.warn(&quot;fail-mock: &quot; + invocation.getMethodName() + &quot; fail-mock enabled , url : &quot; + directory.getUrl(), e);</span><br><span class="line">            &#125;</span><br><span class="line">            result = doMockInvoke(invocation, e);</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    return result;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>进入AbstractClusterInvoker#invoke，在这里会初始化loadbalance。<br>然后进入FailoverClusterInvoker#doInvoke(Invocation invocation, final List&lt;Invoker<t>&gt; invokers, LoadBalance loadbalance)</t></p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line">public Result doInvoke(Invocation invocation, final List&lt;Invoker&lt;T&gt;&gt; invokers, LoadBalance loadbalance) throws RpcException &#123;</span><br><span class="line">    List&lt;Invoker&lt;T&gt;&gt; copyInvokers = invokers;</span><br><span class="line">    checkInvokers(copyInvokers, invocation);</span><br><span class="line">    String methodName = RpcUtils.getMethodName(invocation);</span><br><span class="line">    int len = getUrl().getMethodParameter(methodName, Constants.RETRIES_KEY, Constants.DEFAULT_RETRIES) + 1;//重试次数，默认2，共请求3次</span><br><span class="line">    if (len &lt;= 0) &#123;</span><br><span class="line">        len = 1;</span><br><span class="line">    &#125;</span><br><span class="line">    // retry loop.</span><br><span class="line">    RpcException le = null; // last exception.</span><br><span class="line">    List&lt;Invoker&lt;T&gt;&gt; invoked = new ArrayList&lt;Invoker&lt;T&gt;&gt;(copyInvokers.size()); // invoked invokers.</span><br><span class="line">    Set&lt;String&gt; providers = new HashSet&lt;String&gt;(len);</span><br><span class="line">    for (int i = 0; i &lt; len; i++) &#123;</span><br><span class="line">        //Reselect before retry to avoid a change of candidate `invokers`.</span><br><span class="line">        //NOTE: if `invokers` changed, then `invoked` also lose accuracy.</span><br><span class="line">        if (i &gt; 0) &#123;</span><br><span class="line">            checkWhetherDestroyed();</span><br><span class="line">            copyInvokers = list(invocation);</span><br><span class="line">            // check again</span><br><span class="line">            checkInvokers(copyInvokers, invocation);</span><br><span class="line">        &#125;</span><br><span class="line">        Invoker&lt;T&gt; invoker = select(loadbalance, invocation, copyInvokers, invoked);</span><br><span class="line">        invoked.add(invoker);</span><br><span class="line">        RpcContext.getContext().setInvokers((List) invoked);</span><br><span class="line">        try &#123;</span><br><span class="line">            Result result = invoker.invoke(invocation);</span><br><span class="line">            。。。</span><br><span class="line">            return result;</span><br><span class="line">            。。。</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>最终进入DubboInvoker#doInvoke<br>return (Result) currentClient.request(inv, timeout).get();</p>
+
+      
+    </div>
+
+    
+
+    
+    
+    
+
+    
+
+    
+      
+    
+    
+
+    
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/dubbo/" rel="tag"># dubbo</a>
+          
+        </div>
+      
+
+      
+      
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2019/01/19/java NIO之零拷贝技术/" rel="next" title="java NIO之零拷贝技术">
+                <i class="fa fa-chevron-left"></i> java NIO之零拷贝技术
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+  </div>
+
+
+          </div>
+          
+
+  
+
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap">
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview-wrap">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-overview">
+          <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+            
+              <p class="site-author-name" itemprop="name">MrFroS</p>
+              <div class="site-description motion-element" itemprop="description"></div>
+          </div>
+
+          
+            <nav class="site-state motion-element">
+              
+                <div class="site-state-item site-state-posts">
+                
+                  <a href="/archives/">
+                
+                    <span class="site-state-item-count">11</span>
+                    <span class="site-state-item-name">日志</span>
+                  </a>
+                </div>
+              
+
+              
+                
+                
+                <div class="site-state-item site-state-categories">
+                  
+                    
+                      <a href="/categories/">
+                    
+                  
+                    
+                    
+                      
+                    
+                      
+                    
+                      
+                    
+                      
+                    
+                      
+                    
+                      
+                    
+                      
+                    
+                    <span class="site-state-item-count">7</span>
+                    <span class="site-state-item-name">分类</span>
+                  </a>
+                </div>
+              
+
+              
+                
+                
+                <div class="site-state-item site-state-tags">
+                  
+                    
+                      <a href="/tags/">
+                    
+                  
+                    
+                    
+                      
+                    
+                      
+                    
+                      
+                    
+                      
+                    
+                      
+                    
+                      
+                    
+                    <span class="site-state-item-count">6</span>
+                    <span class="site-state-item-name">标签</span>
+                  </a>
+                </div>
+              
+            </nav>
+          
+
+          
+
+          
+
+          
+
+          
+
+          
+          
+
+          
+            
+          
+          
+
+        </div>
+      </div>
+
+      
+      <!--noindex-->
+        <div class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+            
+            
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#1-解析invoker-refprotocol-refer-interfaceClass-urls-get-0"><span class="nav-number">1.</span> <span class="nav-text">1. 解析invoker = refprotocol.refer(interfaceClass, urls.get(0));</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#1-1-RegistryDirectory，包含完整的地址列表，直接对接注册中心，并动态接收注册中心地址变更。非常重要。"><span class="nav-number">1.1.</span> <span class="nav-text">1.1 RegistryDirectory，包含完整的地址列表，直接对接注册中心，并动态接收注册中心地址变更。非常重要。</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#1-2-分析registry-register-directory-getRegisteredConsumerUrl"><span class="nav-number">1.2.</span> <span class="nav-text">1.2 分析registry.register(directory.getRegisteredConsumerUrl());</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#1-3-directory-subscribe"><span class="nav-number">1.3.</span> <span class="nav-text">1.3 directory.subscribe</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#1-4-Invoker-invoker-cluster-join-directory"><span class="nav-number">1.4.</span> <span class="nav-text">1.4 Invoker invoker = cluster.join(directory);</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#2-解析return-T-proxyFactory-getProxy-invoker"><span class="nav-number">2.</span> <span class="nav-text">2. 解析return (T) proxyFactory.getProxy(invoker);</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#2-1-先进入StubProxyFactoryWrapper-getProxy-Invoker"><span class="nav-number">2.1.</span> <span class="nav-text">2.1 先进入StubProxyFactoryWrapper#getProxy(Invoker)</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#2-2-再进入AbstractProxyFactory-getProxy-Invoker"><span class="nav-number">2.2.</span> <span class="nav-text">2.2 再进入AbstractProxyFactory#getProxy(Invoker)</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#3-调用过程"><span class="nav-number">3.</span> <span class="nav-text">3.调用过程</span></a></li></ol></div>
+            
+
+          </div>
+        </div>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+  
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">&copy; <span itemprop="copyrightYear">2019</span>
+  <span class="with-love" id="animate">
+    <i class="fa fa-user"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">MrFroS</span>
+
+  
+
+  
+</div>
+
+
+  <div class="powered-by">由 <a href="https://hexo.io" class="theme-link" rel="noopener" target="_blank">Hexo</a> 强力驱动 v3.8.0</div>
+
+
+
+  <span class="post-meta-divider">|</span>
+
+
+
+  <div class="theme-info">主题 – <a href="https://theme-next.org" class="theme-link" rel="noopener" target="_blank">NexT.Muse</a> v7.1.1</div>
+
+
+
+
+        
+
+
+
+
+
+
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+    
+
+    
+
+    
+  </div>
+
+  
+
+<script>
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+
+  
+
+
+  <script src="/js/utils.js?v=7.1.1"></script>
+
+  <script src="/js/motion.js?v=7.1.1"></script>
+
+
+
+  
+  
+
+
+  <script src="/js/schemes/muse.js?v=7.1.1"></script>
+
+
+
+  
+  <script src="/js/scrollspy.js?v=7.1.1"></script>
+<script src="/js/post-details.js?v=7.1.1"></script>
+
+
+
+  
+
+
+  <script src="/js/next-boot.js?v=7.1.1"></script>
+
+
+  
+
+  
+
+  
+
+  
+
+
+  
+
+
+  
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
