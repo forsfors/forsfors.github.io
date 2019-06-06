@@ -100,7 +100,7 @@
 <meta name="keywords" content="nio">
 <meta property="og:type" content="article">
 <meta property="og:title" content="java NIO之零拷贝技术">
-<meta property="og:url" content="http://mrfors.top/2019/01/19/java NIO之零拷贝技术/index.html">
+<meta property="og:url" content="http://www.mrfors.top/2019/01/19/java NIO之零拷贝技术/index.html">
 <meta property="og:site_name" content="MrForS">
 <meta property="og:description" content="按照维基百科的定义，零拷贝技术是避免cpu从一个内存区域拷贝内容到其他区域的技术。具体来讲是避免用户空间拷贝到内核空间及避免内核空间内的拷贝。需要操作系统，驱动及硬件的支持。  使用mmap使数据传输不需要经过复制到用户空间的过程下图分两部分，上面是用户态和内核态的切换，下面是复制操作。  应用程序调用mmap()，磁盘上的数据会通过DMA被拷贝的内核缓冲区，接着操作系统会把这段内核缓冲区与应用程">
 <meta property="og:locale" content="zh-CN">
@@ -118,7 +118,7 @@
 
   
   
-  <link rel="canonical" href="http://mrfors.top/2019/01/19/java NIO之零拷贝技术/">
+  <link rel="canonical" href="http://www.mrfors.top/2019/01/19/java NIO之零拷贝技术/">
 
 
 
@@ -327,7 +327,7 @@
   
   
   <div class="post-block">
-    <link itemprop="mainEntityOfPage" href="http://mrfors.top/2019/01/19/java NIO之零拷贝技术/">
+    <link itemprop="mainEntityOfPage" href="http://www.mrfors.top/2019/01/19/java NIO之零拷贝技术/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
       <meta itemprop="name" content="MrFroS">
@@ -430,7 +430,7 @@
 <p>应用程序调用mmap()，磁盘上的数据会通过DMA被拷贝的内核缓冲区，接着操作系统会把这段内核缓冲区与应用程序共享，这样就不需要把内核缓冲区的内容往用户空间拷贝。应用程序再调用write(),操作系统直接将内核缓冲区的内容拷贝到socket缓冲区中，这一切都发生在内核态，最后，socket缓冲区再把数据发到网卡去。</p>
 <ol start="2">
 <li>sendfile 减少内核态和用户态切换，减少内核态间的复制<br><img src="https://www.linuxjournal.com/files/linuxjournal.com/linuxjournal/articles/063/6345/6345f4.jpg" alt="image"><br> sendfile系统调用利用DMA引擎将文件内容拷贝到内核缓冲区去，然后将带有文件位置和长度信息的缓冲区描述符添加socket缓冲区去，这一步不会将内核中的数据拷贝到socket缓冲区中，DMA引擎会将内核缓冲区的数据拷贝到协议引擎中去，避免内核 中的一次拷贝。</li>
-<li>对于java来说使用堆外内存也可以减少数据的拷贝，具体见之前的<a href="http://www.mrfors.top/2019/01/03/Linux%20%E7%B3%BB%E7%BB%9F%E7%9A%84%E9%A1%B5%E7%BC%93%E5%AD%98page%20cache%E5%92%8CNIO%20%E7%9A%84%E5%A0%86%E5%A4%96%E5%86%85%E5%AD%98%E6%98%A0%E5%B0%84/" target="_blank" rel="noopener">博文</a></li>
+<li>对于java来说使用堆外内存也可以减少数据的拷贝，具体见之前的<a href="http://www.mrfors.top/2019/01/03/Linux%20%E7%B3%BB%E7%BB%9F%E7%9A%84%E9%A1%B5%E7%BC%93%E5%AD%98page%20cache%E5%92%8CNIO%20%E7%9A%84%E5%A0%86%E5%A4%96%E5%86%85%E5%AD%98%E6%98%A0%E5%B0%84/">博文</a></li>
 </ol>
 <p>零拷贝在Java中对应的api：<br>java.nio.channels.FileChannel#transferTo<br>java.nio.channels.FileChannel#transferFrom</p>
 <p>netty中：<br>io.netty.channel.FileRegion</p>
