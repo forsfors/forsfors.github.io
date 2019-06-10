@@ -104,7 +104,7 @@
 <meta property="og:site_name" content="程序员MrForS">
 <meta property="og:description" content="Java 并发包 java.util.concurrent 提供了很多方便进行并发编程的工具类如ReentrantLock、CountDownLatch、CyclicBarrier等，使用这些类需要了解 AbstractQueuedSynchronizer（简写为AQS，是一个抽象类）。之前的文章介绍了ReentrantLock和synchronized的区别和使用。这里以==ReentrantL">
 <meta property="og:locale" content="zh-CN">
-<meta property="og:updated_time" content="2019-06-06T02:15:47.104Z">
+<meta property="og:updated_time" content="2019-06-09T22:32:55.328Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="AbstractQueuedSynchronizer分析">
 <meta name="twitter:description" content="Java 并发包 java.util.concurrent 提供了很多方便进行并发编程的工具类如ReentrantLock、CountDownLatch、CyclicBarrier等，使用这些类需要了解 AbstractQueuedSynchronizer（简写为AQS，是一个抽象类）。之前的文章介绍了ReentrantLock和synchronized的区别和使用。这里以==ReentrantL">
@@ -434,8 +434,8 @@
 <figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">LockSupport.unpark(thread);</span><br></pre></td></tr></table></figure>
 <p>非公平锁原理：每个新来的线程，是不管队列是否为空，都会先去做一次抢锁的。</p>
 <p>公平锁原理：队列为空则抢锁，不为空则入队。</p>
-<p>AQS的共享模式（CountDownLatch和ReentrantReadWriteLock等会用到），AQS实现共享锁时每个线程都可以对 state 进行加减操作，并进入等待队列，当达到要求时，唤醒队列中所有线程。</p>
-<p>注：AQS源码写得很好也比较复杂，这里只做原理记录，因为已经忘记一次了。</p>
+<p>AQS的共享模式（CountDownLatch和ReentrantReadWriteLock等会用到），AQS实现共享锁时每个线程都可以对 state 进行加减操作，CountDownLatch当state大于0时进入等待队列，ReentrantReadWriteLock当写 锁被获取（state低16位大于1）时进入等待队列，当达到要求时，唤醒队列中所有线程。</p>
+<p>注：AQS源码写得很好也比较复杂，这里只做原理记录，因为已经忘记多次了。</p>
 
       
     </div>
@@ -482,8 +482,8 @@
 
           <div class="post-nav-prev post-nav-item">
             
-              <a href="/2018/12/22/java类加载机制之类加载器/" rel="prev" title="java类加载机制之类加载器">
-                java类加载机制之类加载器 <i class="fa fa-chevron-right"></i>
+              <a href="/2018/12/22/java类加载机制之类加载过程/" rel="prev" title="java类加载机制之类加载过程">
+                java类加载机制之类加载过程 <i class="fa fa-chevron-right"></i>
               </a>
             
           </div>
